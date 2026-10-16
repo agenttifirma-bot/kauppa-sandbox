@@ -1,0 +1,17 @@
+[Unit]
+Description=Kauppatiimi: K7 strategiatutkija (hypoteesit -> K6-testi, ei koske holdoutiin eika salkkuihin)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=kauppa
+Group=kauppa
+WorkingDirectory=/srv/kauppa/k1
+ExecStart=/usr/bin/python3 /srv/kauppa/k1/k7.py
+TimeoutStartSec=14400
+Nice=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/kauppa/data

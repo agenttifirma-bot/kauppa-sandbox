@@ -1,0 +1,10 @@
+[Unit]
+Description=Kauppatiimi: viikkoretro sunnuntaisin
+
+[Timer]
+OnCalendar=Sun *-*-* 18:00:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,20 @@
+[Unit]
+Description=Kauppatiimi: paivittainen ajo (data, tarkistus, flash- ja pro-salkut)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=kauppa
+Group=kauppa
+WorkingDirectory=/srv/kauppa/k1
+ExecStart=-/usr/bin/python3 /srv/kauppa/k1/lataa.py
+ExecStart=-/usr/bin/python3 /srv/kauppa/k1/tarkista.py
+ExecStart=-/usr/bin/python3 /srv/kauppa/k1/paiva.py --malli flash --salkku-db /srv/kauppa/data/salkku_flash.db
+ExecStart=-/usr/bin/python3 /srv/kauppa/k1/paiva.py --malli pro --salkku-db /srv/kauppa/data/salkku_pro.db
+TimeoutStartSec=2400
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/kauppa/data
+ProtectHome=true
+PrivateTmp=true

@@ -1,0 +1,16 @@
+[Unit]
+Description=Kauppatiimi: viikkoretro (vain luku, Telegram)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=kauppa
+Group=kauppa
+WorkingDirectory=/srv/kauppa/k1
+ExecStart=/usr/bin/python3 /srv/kauppa/k1/retro.py
+TimeoutStartSec=120
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/srv/kauppa/data

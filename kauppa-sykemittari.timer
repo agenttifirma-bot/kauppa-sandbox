@@ -1,0 +1,10 @@
+[Unit]
+Description=Kauppatiimi: sykemittari paivittain
+
+[Timer]
+OnCalendar=*-*-* 11:30:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
