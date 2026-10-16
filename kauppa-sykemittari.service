@@ -13,4 +13,5 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadOnlyPaths=/srv/kauppa/data
+# WAL-tilassa oleva SQLite tarvitsee kirjoitusoikeuden -shm-tiedostoon myos lukiessa; koodi avaa kannat mode=ro
+ReadWritePaths=/srv/kauppa/data
