@@ -61,6 +61,13 @@ class SalkkuTesti(unittest.TestCase):
             tulokset.append(salkku.suorita_paiva(con, mk, ALKU + timedelta(days=i), e, S))
         return con, tulokset
 
+    def test_ei_ehdotusta_sanotaan_suoraan(self):
+        mk = markkina({s: [(100, 100)] * 5 for s in S})
+        con, t = self.aja(mk, [None])
+        self.assertEqual(t[0]["kaupat"], [])
+        self.assertTrue(any(h.startswith("EI KAUPPOJA: ei ehdotusta") for h in t[0]["huomautukset"]))
+        self.assertFalse(any("sanakirja" in h for h in t[0]["huomautukset"]))
+
     def test_osto_kulut_ja_kirjanpitoidentiteetti(self):
         mk = markkina({"BTCUSDT": [(100, 100)] * 3})
         con, t = self.aja(mk, [{"BTCUSDT": 0.10}])

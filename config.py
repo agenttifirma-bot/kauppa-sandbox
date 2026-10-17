@@ -8,6 +8,8 @@ SYMBOLIT = [
     "DOGEUSDT", "ADAUSDT", "TRXUSDT", "AVAXUSDT", "LINKUSDT",
     "DOTUSDT", "LTCUSDT", "BCHUSDT", "NEARUSDT", "SUIUSDT",
     "AAVEUSDT", "UNIUSDT", "ATOMUSDT", "ETCUSDT", "HBARUSDT",
+    # lisatty 15.10.2026 (Tonyn hyvaksyma, 26 kolikon lataus); salkut omistavat naita, joten lataus EI SAA pudottaa niita
+    "ZECUSDT", "ENAUSDT", "PEPEUSDT", "HYPEUSDT", "WLDUSDT", "TAOUSDT",
 ]
 
 ALKU = (2021, 10)  # historia tasta kuukaudesta alkaen (5 vuotta)

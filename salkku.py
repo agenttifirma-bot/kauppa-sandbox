@@ -105,7 +105,10 @@ def suorita_paiva(con, markkina, paiva, ehdotus, sallitut):
         except Ehdotusvirhe as e:
             hylatty = str(e)
             painot = {s: (omat[s] * avaus[s] / v_open if v_open > 0 else 0.0) for s in omat}  # ei muutoksia
-            huom.append("EHDOTUS HYLATTY, ei kauppoja: %s" % e)
+            if ehdotus is None:
+                huom.append("EI KAUPPOJA: ei ehdotusta (kriitikko hylkasi tai analyytikko ei ehdottanut painoja)")
+            else:
+                huom.append("EHDOTUS HYLATTY, ei kauppoja: %s" % e)
     for s in list(painot):
         if s not in avaus:
             h = _hinnat(markkina, s, d_ms)
