@@ -317,7 +317,7 @@ class KuivaTesti(unittest.TestCase):
                 koodi = k7.main(["--ei-tg", "--kuiva", "--rekisteri", os.path.join(d, "r.db")])
             self.assertEqual(koodi, 1)
             r = [json.loads(x) for x in open(loki)][0]
-            self.assertEqual((r["tulos"], r["virhekoodi"]), ("virhe", "LLMVirhe"))
+            self.assertEqual((r["tulos"], r["virhekoodi"]), ("virhe", "LLMVirhe: HTTP 500"))
 
 
 class MainTesti(unittest.TestCase):
