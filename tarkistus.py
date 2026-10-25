@@ -4,6 +4,7 @@ ja desimaaliluvut/isot luvut, joita taulukossa ei ole (toleranssi pyoristykselle
 import re
 
 LUKU = re.compile(r"(?<![\w.])[-+]?\d+(?:[.,]\d+)?")
+PROSENTTI = re.compile(r"\s*(%|prosent)")   # kokonaisluku prosenttina on tuotto/osuus -> pitaa loytya taulukosta tai vakioista
 SYMBOLI = re.compile(r"\b[A-Z0-9]{2,12}USDT\b")
 VAKIOT = {0.2, 0.15, 0.9, 0.1, 0.05, 0.5, 0.25}   # kulu, positiokatto, kokonaiskatto, kateispuskuri, jarru jne. (rajat.py / kehote)
 
@@ -38,8 +39,18 @@ def tarkista_perustelu(perustelu, taulukko):
     for s in sorted(set(SYMBOLI.findall(perustelu))):
         if s not in symbolit:
             havainnot.append("symboli:" + s)
-    for x in _luvuiksi(SYMBOLI.sub(" ", perustelu)):
-        if abs(x) in VAKIOT or (x == int(x) and 0 <= abs(x) <= 100) or _loytyy(x, luvut):
+    puhdas = SYMBOLI.sub(" ", perustelu)
+    for m in LUKU.finditer(puhdas):
+        try:
+            x = float(m.group().replace(",", "."))
+        except ValueError:
+            continue
+        prosentti = bool(PROSENTTI.match(puhdas, m.end()))
+        if abs(x) in VAKIOT or _loytyy(x, luvut):
+            continue
+        if prosentti and abs(x) / 100 in VAKIOT:
+            continue
+        if x == int(x) and 0 <= abs(x) <= 100 and not prosentti:
             continue
         havainnot.append("luku:%g" % x)
     return havainnot

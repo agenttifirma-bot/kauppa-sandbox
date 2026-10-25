@@ -24,7 +24,7 @@ TAPAUKSET = [
     ("XRPUSDT:n volyymi on 450000000, joten likviditeetti on hyva.", True),
     ("SOLUSDT tuotto 20.45 % ja AVAXUSDT 15.2 % tukevat trendia.", True),
     ("ETHUSDT on rankissa 2 ja sen 30 paivan tuotto on 12.9 %.", True),
-    # Tunnettu sokea piste: kokonaisluvut 0..100 sallitaan aina (lukumaarat, rankit), joten keksitty kokonaisluku ei jää kiinni.
+    # Prosenttina esitetty kokonaisluku tarkistetaan; paljas kokonaisluku (rankki, lukumaara) sallitaan edelleen -> toinen tapaus on tunnettu sokea piste.
     ("ETHUSDT nousi 45 % viikossa.", True),
     ("SOLUSDT on rankissa 9, joten se on heikoin.", True),
     ("", False),
@@ -55,7 +55,7 @@ class TarkistinEval(unittest.TestCase):
         tarkkuus = tp / (tp + fp) if tp + fp else 1.0
         osuvuus = tp / (tp + fn) if tp + fn else 1.0
         self.assertGreaterEqual(tarkkuus, 0.9, eroavat)
-        self.assertGreaterEqual(osuvuus, 0.7, eroavat)  # sokeat pisteet huomioiden; nosta kun tarkistin paranee
+        self.assertGreaterEqual(osuvuus, 0.8, eroavat)
 
 
 if __name__ == "__main__":
