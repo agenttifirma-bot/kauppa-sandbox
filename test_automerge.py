@@ -44,6 +44,9 @@ class ArvioiTesti(unittest.TestCase):
         self.assertFalse(self.ok(dict(PR, labels=["ei-automerge"]), [tiedosto("test_x.py")]))
         self.assertFalse(self.ok(dict(PR, head_repo="b/k"), [tiedosto("test_x.py")]))
 
+    def test_dokumentti_alikansiossa_ei_kelpaa(self):
+        self.assertFalse(self.ok(PR, [tiedosto("docs/muistio.md")]))
+
     def test_polkutemput(self):
         for nimi in ("../test_x.py", "tools/../test_x.py", "alikansio/test_x.py"):
             self.assertFalse(self.ok(PR, [tiedosto(nimi)]), nimi)
