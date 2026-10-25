@@ -6,7 +6,7 @@ import re
 import time
 
 POLKU = os.environ.get("KAUPPA_TAPAHTUMAT", "/srv/kauppa/data/tapahtumat.jsonl")
-SALLITUT_KENTAT = ("ajo", "ryhma", "malli", "tulos", "virhekoodi", "tokens_in", "tokens_out", "kesto_s", "ehdotettu", "hylatty", "kelvollinen", "keksitty")
+SALLITUT_KENTAT = ("ajo", "ryhma", "malli", "tulos", "virhekoodi", "tokens_in", "tokens_out", "kesto_s", "ehdotettu", "hylatty", "kelvollinen", "keksitty", "tuplia")
 SALAISUUDET = [re.compile(r"sk-[A-Za-z0-9_-]{16,}"), re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"), re.compile(r"\b\d{6,}:[A-Za-z0-9_-]{30,}\b")]
 TULOKSET = ("ok", "ei_tietoa", "virhe")
 
