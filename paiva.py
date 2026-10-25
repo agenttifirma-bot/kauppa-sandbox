@@ -16,6 +16,7 @@ import rajat
 import salkku
 import taulukko
 import tapahtumat
+import tarkistus
 
 PV = 86400000
 
@@ -77,6 +78,7 @@ def aja_paiva(paiva, malli, markkina, sal, env, hae_llm=None):
             a, kaytto = agentit.kysy_analyytikko(teksti, omistukset, malli, env, hae_llm)
             _kirjaa_kutsu(sal, paiva, "analyytikko", malli, kaytto)
             tulos["analyytikko"] = a
+            tulos["keksitty"] = len(tarkistus.tarkista_perustelu(a.get("perustelu"), teksti))   # vain havainto, ei vaikuta kauppoihin
             if "paino" in a:
                 rooli = "kriitikko"
                 k, kaytto = agentit.kysy_kriitikko(teksti, omistukset, a["paino"], malli, env, hae_llm)
@@ -98,7 +100,7 @@ def _kirjaa_tapahtuma(sal, paiva, ryhma, malli, t, kesto):
     try:
         r = sal.execute("SELECT COALESCE(SUM(tokens_in),0), COALESCE(SUM(tokens_out),0) FROM llm_kutsut WHERE paiva=?", (paiva.isoformat(),)).fetchone()
         tapahtumat.kirjaa("paiva", tapahtumat.paivan_tulos(t), ryhma=ryhma, malli=malli, virhekoodi=tapahtumat.virhekoodi(t.get("virhe")),
-                          tokens_in=r[0], tokens_out=r[1], kesto_s=round(kesto, 1))
+                          tokens_in=r[0], tokens_out=r[1], kesto_s=round(kesto, 1), keksitty=t.get("keksitty"))
     except Exception:
         pass
 
