@@ -7,9 +7,11 @@ Sallittu vain kun KAIKKI ehdot tayttyvat:
   - PR on saman repon haarasta, ei luonnos, eika siina ole tunnistetta 'ei-automerge'
   - enintaan 20 tiedostoa ja 300 muutettua rivia
   - tiedostot vain lisatty tai muokattu (ei poistoa, ei uudelleennimeamista)
-  - jokainen tiedosto on dokumentti (*.md) tai testi (test_*.py juuressa)
-  - mikaan tiedosto ei ole suojatulla polulla (.github/, tools/, rajat.py, config.py, systemd-yksikot,
-    avain-/tunnistetiedostot). Tuotantokoodi (muut .py) ei koskaan automergaa: ihminen mergaa.
+  - jokainen tiedosto on dokumentti (*.md), testi (test_*.py juuressa) tai tuotantokoodi (muu .py juuressa)
+  - tuotantokoodi kelpaa vain jos sama PR muuttaa myos testia (test_*.py) ja koodimuutos on enintaan 150 rivia
+  - mikaan tiedosto ei ole suojatulla polulla: .github/, tools/, lakitiedostot (rajat.py, config.py, k7.py,
+    riskivahti.py), systemd-yksikot, avain-/tunnistetiedostot. Nama mergaa aina ihminen.
+Muutos ei vaikuta palvelimeen: tuotantoon vie vain hae.sh <commit> <versio> (testit, snapshot, smoke, rollback).
 Silloin kytketaan GitHubin auto-merge (squash): yhdistyy vasta kun pakolliset tarkistukset ovat lapi.
 """
 import json
@@ -25,11 +27,14 @@ OPT_OUT = "ei-automerge"
 SALLITUT = [
     re.compile(r"^[A-Za-z0-9_.-]+\.md$"),
     re.compile(r"^test_[A-Za-z0-9_]+\.py$"),
+    re.compile(r"^[a-z][a-z0-9_]*\.py$"),   # tuotantokoodi; lisaehdot arvioi()-funktiossa
 ]
+TESTI = re.compile(r"^test_[A-Za-z0-9_]+\.py$")
+MAX_KOODIRIVEJA = 150
 SUOJATUT = [
     re.compile(r"^\.github/"),
     re.compile(r"^tools/"),
-    re.compile(r"^(rajat|config)\.py$"),
+    re.compile(r"^(rajat|config|k7|riskivahti)\.py$"),
     re.compile(r"\.(service|timer)$"),
     re.compile(r"(^|/)\.env"),
     re.compile(r"secret|token|credential|password|key", re.IGNORECASE),
@@ -66,6 +71,13 @@ def arvioi(pr, tiedostot):
     rivit = sum(int(t.get("changes", 0)) for t in tiedostot)
     if rivit > MAX_RIVEJA:
         syyt.append("liian suuri muutos (%d rivia)" % rivit)
+    koodi = [t for t in tiedostot if t.get("filename", "").endswith(".py") and not TESTI.match(t.get("filename", ""))]
+    if koodi:
+        if not any(TESTI.match(t.get("filename", "")) for t in tiedostot):
+            syyt.append("koodimuutos ilman testia")
+        koodirivit = sum(int(t.get("changes", 0)) for t in koodi)
+        if koodirivit > MAX_KOODIRIVEJA:
+            syyt.append("koodimuutos liian suuri (%d rivia)" % koodirivit)
     for t in tiedostot:
         if t.get("status") not in ("added", "modified"):
             syyt.append("tiedoston tila %s: %s" % (t.get("status"), t.get("filename")))

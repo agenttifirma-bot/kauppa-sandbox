@@ -1,4 +1,4 @@
-"""Automergen paatossaannot: vain testit ja dokumentit saman repon haarasta; tuotantokoodi, rajat ja ajastus eivat koskaan."""
+"""Automergen paatossaannot: testit, dokumentit ja testillinen pieni koodimuutos saman repon haarasta; lakitiedostot ja ajastus eivat koskaan."""
 import importlib.util
 import os
 import unittest
@@ -21,9 +21,18 @@ class ArvioiTesti(unittest.TestCase):
     def test_testit_ja_dokumentit_kelpaavat(self):
         self.assertTrue(self.ok(PR, [tiedosto("test_eval_k7_spec.py"), tiedosto("README.md", "modified")]))
 
-    def test_tuotantokoodi_ei_kelpaa(self):
-        for nimi in ("k7.py", "paiva.py", "tarkistus.py", "tapahtumat.py"):
-            self.assertFalse(self.ok(PR, [tiedosto(nimi, "modified")]), nimi)
+    def test_koodi_kelpaa_vain_testin_kanssa(self):
+        for nimi in ("paiva.py", "tarkistus.py", "tapahtumat.py"):
+            self.assertFalse(self.ok(PR, [tiedosto(nimi, "modified")]), nimi + " ilman testia")
+            self.assertTrue(self.ok(PR, [tiedosto(nimi, "modified"), tiedosto("test_tarkistus.py", "modified")]), nimi)
+
+    def test_koodimuutos_liian_suuri(self):
+        self.assertFalse(self.ok(PR, [tiedosto("paiva.py", "modified", 151), tiedosto("test_x.py")]))
+        self.assertTrue(self.ok(PR, [tiedosto("paiva.py", "modified", 150), tiedosto("test_x.py")]))
+
+    def test_lakitiedostot_eivat_kelpaa_testin_kanssakaan(self):
+        for nimi in ("k7.py", "riskivahti.py"):
+            self.assertFalse(self.ok(PR, [tiedosto(nimi, "modified"), tiedosto("test_k7.py", "modified")]), nimi)
 
     def test_suojatut_eivat_kelpaa(self):
         for nimi in ("rajat.py", "config.py", "kauppa-k7.service", "kauppa-k7.timer", ".github/workflows/ci.yml", "tools/automerge.py", ".env", "test_secret.py"):
