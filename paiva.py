@@ -3,6 +3,7 @@ HUOM: vain eteenpain (forward) -paperikauppa: menneisyyden LLM-backtest on saast
 import argparse
 import os
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 
 import agentit
@@ -14,6 +15,7 @@ import notify
 import rajat
 import salkku
 import taulukko
+import tapahtumat
 
 PV = 86400000
 
@@ -89,6 +91,16 @@ def aja_paiva(paiva, malli, markkina, sal, env, hae_llm=None):
     sim = salkku.suorita_paiva(sal, markkina, paiva, ehdotus, sallitut)
     tulos["sim"] = sim
     return tulos
+
+
+def _kirjaa_tapahtuma(sal, paiva, ryhma, malli, t, kesto):
+    """Prosessin mittarit tapahtumalokiin (tapahtumat.py). Ei koskaan kaada ajoa."""
+    try:
+        r = sal.execute("SELECT COALESCE(SUM(tokens_in),0), COALESCE(SUM(tokens_out),0) FROM llm_kutsut WHERE paiva=?", (paiva.isoformat(),)).fetchone()
+        tapahtumat.kirjaa("paiva", tapahtumat.paivan_tulos(t), ryhma=ryhma, malli=malli, virhekoodi=tapahtumat.virhekoodi(t.get("virhe")),
+                          tokens_in=r[0], tokens_out=r[1], kesto_s=round(kesto, 1))
+    except Exception:
+        pass
 
 
 def raportti(tulos, sal, markkina):
@@ -172,6 +184,7 @@ def main():
         print("ei uutta paivaa"); return 0
     virheita = 0
     for p in paivat:
+        alkoi = time.monotonic()
         try:
             t = aja_paiva(p, malli, markkina, sal, env)
         except salkku.Datavirhe as e:
@@ -179,6 +192,7 @@ def main():
             print(msg)
             if not a.ei_tg: notify.laheta(msg, env_tg)
             return 2
+        _kirjaa_tapahtuma(sal, p, a.malli, malli, t, time.monotonic() - alkoi)
         msg = raportti(t, sal, markkina)
         print(msg)
         if not a.ei_tg:
