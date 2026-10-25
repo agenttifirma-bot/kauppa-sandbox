@@ -18,6 +18,7 @@ import re
 import sqlite3
 import statistics
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 
 import agentit
@@ -29,6 +30,7 @@ import llm
 import mittarit as mit
 import notify
 import rajat
+import tapahtumat
 
 K7_VIIKKO_KIINTIO = 3
 MAX_RUUDUKKO = 8
@@ -395,9 +397,13 @@ def main(argv=None):
             if not a.ei_tg:
                 notify.laheta("K7 pysahtyi: historia.db puuttuu", env_tg)
             return 2
+        alkoi = time.monotonic()
         try:
             specit, hylatyt = ehdota(rek, n, rajat.MALLIT[a.malli], llm.lue_env(a.llm_env))
+            tapahtumat.kirjaa("k7", "ok" if specit else "ei_tietoa", ryhma=a.malli, malli=rajat.MALLIT[a.malli], ehdotettu=len(specit) + len(hylatyt),
+                              kelvollinen=len(specit), hylatty=len(hylatyt), kesto_s=round(time.monotonic() - alkoi, 1))
         except (llm.LLMVirhe, agentit.Vastausvirhe) as e:
+            tapahtumat.kirjaa("k7", "virhe", ryhma=a.malli, malli=rajat.MALLIT[a.malli], virhekoodi=type(e).__name__, kesto_s=round(time.monotonic() - alkoi, 1))
             msg = "K7: ehdotus epaonnistui (%s), ei testeja" % e
             print(msg)
             if not a.ei_tg:
