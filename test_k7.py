@@ -269,6 +269,57 @@ class TestausTesti(unittest.TestCase):
         self.assertEqual(rek.execute("SELECT COUNT(*) FROM holdout_kaytto").fetchone()[0], 0)
 
 
+class KuivaTesti(unittest.TestCase):
+    ENV = {"LLM_BASE_URL": "http://x/v1", "LLM_API_KEY": "k"}
+
+    def _speksi(self, nimi):
+        return spec_dict(nimi=nimi)
+
+    def aja(self, d, vastaus, taulu=None):
+        import tapahtumat
+        loki = os.path.join(d, "t.jsonl")
+        polku = os.path.join(d, "r.db")
+        with mock.patch.object(tapahtumat, "POLKU", loki), mock.patch("llm.kysy", return_value=(vastaus, {})), \
+                mock.patch("llm.lue_env", return_value=self.ENV):
+            koodi = k7.main(["--ei-tg", "--kuiva", "--malli", "flash", "--rekisteri", polku])
+        return koodi, loki, polku
+
+    def test_kuiva_ei_rekisteroi_eika_kuluta_kiintiota(self):
+        with tempfile.TemporaryDirectory() as d:
+            vast = json.dumps({"hypoteesit": [self._speksi("a"), {"nimi": "vika"}]})
+            koodi, loki, polku = self.aja(d, vast)
+            self.assertEqual(koodi, 0)
+            rek = k7.avaa(polku)
+            self.assertEqual(rek.execute("SELECT COUNT(*) FROM k7_hypoteesit").fetchone()[0], 0)
+            self.assertEqual(k7.kiintiota_jaljella(rek, datetime.now(timezone.utc).date()), k7.K7_VIIKKO_KIINTIO)
+            r = [json.loads(x) for x in open(loki)][0]
+            self.assertEqual((r["ajo"], r["ryhma"], r["tulos"], r["ehdotettu"], r["kelvollinen"], r["hylatty"], r["tuplia"]),
+                             ("k7_kuiva", "flash", "ok", 2, 1, 1, 0))
+            self.assertNotIn("momentum", open(loki).read())
+
+    def test_kuiva_laskee_duplikaatit(self):
+        with tempfile.TemporaryDirectory() as d:
+            polku = os.path.join(d, "r.db")
+            rek = k7.avaa(polku)
+            sp = k7.tarkista_spec(self._speksi("a"))
+            k7.rekisteroi(rek, sp, "kasin", datetime.now(timezone.utc).date())
+            rek.close()
+            koodi, loki, _ = self.aja(d, json.dumps({"hypoteesit": [self._speksi("a")]}))
+            self.assertEqual(koodi, 0)
+            self.assertEqual([json.loads(x) for x in open(loki)][0]["tuplia"], 1)
+
+    def test_kuiva_llm_virhe_kirjataan_eika_kaada(self):
+        import tapahtumat
+        with tempfile.TemporaryDirectory() as d:
+            loki = os.path.join(d, "t.jsonl")
+            with mock.patch.object(tapahtumat, "POLKU", loki), mock.patch("llm.kysy", side_effect=k7.llm.LLMVirhe("HTTP 500")), \
+                    mock.patch("llm.lue_env", return_value=self.ENV):
+                koodi = k7.main(["--ei-tg", "--kuiva", "--rekisteri", os.path.join(d, "r.db")])
+            self.assertEqual(koodi, 1)
+            r = [json.loads(x) for x in open(loki)][0]
+            self.assertEqual((r["tulos"], r["virhekoodi"]), ("virhe", "LLMVirhe"))
+
+
 class MainTesti(unittest.TestCase):
     def test_kill_switch(self):
         with tempfile.TemporaryDirectory() as d:

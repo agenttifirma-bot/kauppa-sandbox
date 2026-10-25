@@ -353,6 +353,25 @@ def raportti(tulokset, hylatyt, perhe):
     return "\n".join(rivit)
 
 
+def kuiva_ehdotus(rek, a, env_tg):
+    """Mallivertailu: yksi ehdotuskutsu, ei rekisterointia eika testia. Kirjaa vain laatumittarit (ei speksien sisaltoa).
+    Kelvollinen = speksi lapaisee tarkista_spec; duplikaatti = sama speksi on jo rekisterissa (hash). Ei koske kiintioon, budjettiin, holdoutiin eika salkkuihin."""
+    alkoi = time.monotonic()
+    malli = rajat.MALLIT[a.malli]
+    try:
+        specit, hylatyt = ehdota(rek, K7_VIIKKO_KIINTIO, malli, llm.lue_env(a.llm_env))
+    except (llm.LLMVirhe, agentit.Vastausvirhe) as e:
+        tapahtumat.kirjaa("k7_kuiva", "virhe", ryhma=a.malli, malli=malli, virhekoodi=type(e).__name__, kesto_s=round(time.monotonic() - alkoi, 1))
+        print("K7 kuiva (%s): ehdotus epaonnistui (%s)" % (a.malli, type(e).__name__))
+        return 1
+    tuplia = sum(1 for sp in specit if rek.execute("SELECT 1 FROM k7_hypoteesit WHERE hash=?", (spec_hash(sp),)).fetchone())
+    tapahtumat.kirjaa("k7_kuiva", "ok" if specit else "ei_tietoa", ryhma=a.malli, malli=malli, ehdotettu=len(specit) + len(hylatyt),
+                      kelvollinen=len(specit), hylatty=len(hylatyt), tuplia=tuplia, kesto_s=round(time.monotonic() - alkoi, 1))
+    print("K7 kuiva (%s): ehdotettu %d, kelvollisia %d, hylattyja %d, duplikaatteja rekisterissä %d" % (
+        a.malli, len(specit) + len(hylatyt), len(specit), len(hylatyt), tuplia))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="K7 strategiatutkija (ei koske holdoutiin eika salkkuihin)")
     ap.add_argument("--malli", default="pro", choices=sorted(rajat.MALLIT))
@@ -361,6 +380,8 @@ def main(argv=None):
     ap.add_argument("--ei-tg", action="store_true")
     ap.add_argument("--spec-tiedosto", help="testaa kasin kirjoitettu speksi (JSON), ei LLM:aa; laskee perheeseen mutta ei viikkokiintioon")
     ap.add_argument("--satunnaisia", type=int, default=0)
+    ap.add_argument("--kuiva", action="store_true",
+                    help="vain ehdotuksen laatu: yksi LLM-kutsu, ei rekisterointia, ei testia, ei kiintio- tai budjettikulutusta (mallivertailuun)")
     ap.add_argument("--db", default=config.DB_POLKU)
     ap.add_argument("--rekisteri", default=rajat.KOKEILU_DB)
     ap.add_argument("--data", choices=("rehellinen", "markkina"), default="rehellinen",
@@ -376,6 +397,8 @@ def main(argv=None):
     except llm.LLMVirhe:
         env_tg = {}
     specit, hylatyt, lahde = [], [], "kasin"
+    if a.kuiva:
+        return kuiva_ehdotus(rek, a, env_tg)
     if a.spec_tiedosto:
         with open(a.spec_tiedosto) as f:
             try:
