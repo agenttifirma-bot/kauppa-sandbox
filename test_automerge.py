@@ -3,7 +3,11 @@ import importlib.util
 import os
 import unittest
 
-_spec = importlib.util.spec_from_file_location("automerge", os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "automerge.py"))
+_polku = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "automerge.py")
+if not os.path.exists(_polku):
+    # Palvelinpaketti (hae.sh) ei sisalla tools/-kansiota: automerge on repon CI-tyokalu, ei tuotantokoodia.
+    raise unittest.SkipTest("tools/automerge.py ei ole paketissa (vain repon CI-tyokalu)")
+_spec = importlib.util.spec_from_file_location("automerge", _polku)
 am = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(am)
 
