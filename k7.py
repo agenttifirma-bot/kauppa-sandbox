@@ -361,8 +361,9 @@ def kuiva_ehdotus(rek, a, env_tg):
     try:
         specit, hylatyt = ehdota(rek, K7_VIIKKO_KIINTIO, malli, llm.lue_env(a.llm_env))
     except (llm.LLMVirhe, agentit.Vastausvirhe) as e:
-        tapahtumat.kirjaa("k7_kuiva", "virhe", ryhma=a.malli, malli=malli, virhekoodi=type(e).__name__, kesto_s=round(time.monotonic() - alkoi, 1))
-        print("K7 kuiva (%s): ehdotus epaonnistui (%s)" % (a.malli, type(e).__name__))
+        syy = "%s: %s" % (type(e).__name__, str(e)[:80])   # LLMVirhe/Vastausvirhe-viestit: HTTP-koodi, finish_reason jne., ei salaisuuksia
+        tapahtumat.kirjaa("k7_kuiva", "virhe", ryhma=a.malli, malli=malli, virhekoodi=syy, kesto_s=round(time.monotonic() - alkoi, 1))
+        print("K7 kuiva (%s): ehdotus epaonnistui (%s)" % (a.malli, syy))
         return 1
     tuplia = sum(1 for sp in specit if rek.execute("SELECT 1 FROM k7_hypoteesit WHERE hash=?", (spec_hash(sp),)).fetchone())
     tapahtumat.kirjaa("k7_kuiva", "ok" if specit else "ei_tietoa", ryhma=a.malli, malli=malli, ehdotettu=len(specit) + len(hylatyt),
