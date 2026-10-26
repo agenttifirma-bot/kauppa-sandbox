@@ -1,0 +1,19 @@
+[Unit]
+Description=Kauppatiimi: K7 kuiva-vertailu (yksi ehdotuskutsu per malli; ei rekisteroi, ei kiintiota, ei holdoutia)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=kauppa
+Group=kauppa
+WorkingDirectory=/srv/kauppa/k1
+# Vain ehdotuksen laatu kirjataan tapahtumalokiin (k7_kuiva). Viiva "-" = epaonnistunut ensimmainen ajo ei esta toista.
+ExecStart=-/usr/bin/python3 /srv/kauppa/k1/k7.py --kuiva --malli flash --ei-tg
+ExecStart=-/usr/bin/python3 /srv/kauppa/k1/k7.py --kuiva --malli pro --ei-tg
+TimeoutStartSec=600
+Nice=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/kauppa/data
