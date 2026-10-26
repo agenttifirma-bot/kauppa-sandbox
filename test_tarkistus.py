@@ -40,3 +40,17 @@ class TarkistusTesti(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProsenttiTesti(unittest.TestCase):
+    TAULUKKO = "BTCUSDT 1 3.42 -8.10\nETHUSDT 2 45.0 4.77\n"
+
+    def test_keksitty_kokonaisprosentti_jaa_kiinni(self):
+        self.assertEqual(tk.tarkista_perustelu("BTCUSDT nousi 45 % viikossa.", "BTCUSDT 1 3.42"), ["luku:45"])
+
+    def test_prosentti_taulukosta_tai_vakiosta_kelpaa(self):
+        self.assertEqual(tk.tarkista_perustelu("ETHUSDT nousi 45 %.", self.TAULUKKO), [])
+        self.assertEqual(tk.tarkista_perustelu("Pidan 10 % kateisessa.", self.TAULUKKO), [])
+
+    def test_paljas_kokonaisluku_sallitaan_edelleen(self):
+        self.assertEqual(tk.tarkista_perustelu("Rankki 9 ja 3 kolikkoa.", self.TAULUKKO), [])
