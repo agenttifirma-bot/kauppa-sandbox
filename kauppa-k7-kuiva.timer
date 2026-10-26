@@ -1,0 +1,12 @@
+[Unit]
+Description=Kauppatiimi: K7 kuiva-vertailu kahdesti paivassa (doc 43: kunnes 20 ajoa per malli)
+
+[Timer]
+# 15:20 ja 22:20: ei osu paivaajoon (09:11), sykemittariin (11:30), K7-viikkoajoon (la 10:00) eika retroon (su 18:00).
+OnCalendar=*-*-* 15:20:00
+OnCalendar=*-*-* 22:20:00
+Persistent=false
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
