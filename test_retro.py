@@ -1,7 +1,10 @@
+import json
 import os
+import sqlite3
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta, timezone
+from unittest import mock
 
 import db
 import rajat
@@ -94,53 +97,122 @@ class RetroTesti(unittest.TestCase):
         self.aja(10)
         self.assertEqual(m, [os.path.getmtime(self.a), os.path.getmtime(self.b)])
 
-    def aja_havainnot(self, paivia, polku):
+
+class HavainnotTesti(RetroTesti):
+    """doc 67 vaihe 1: havainnot.md (enintaan ~1500 merkkia, vain mittausta)."""
+
+    def setUp(self):
+        super().setUp()
+        self.polku = os.path.join(self.d.name, "havainnot.md")
+
+    def aja_h(self, paivia, polku="oletus"):
         tanaan = self.alku + timedelta(days=paivia)
-        return retro.raportti(self.data, {"flash": self.a, "pro": self.b}, tanaan, None, polku)
+        return retro.raportti(self.data, {"flash": self.a, "pro": self.b}, tanaan, None, self.polku if polku == "oletus" else polku)
 
-    def valmis(self, paivia=10):
-        self.markkina(paivia); self.salkku(self.a, paivia, kaupat=2); self.salkku(self.b, paivia, 0.002, jarru=True)
-        return os.path.join(self.d.name, "havainnot.md")
+    def teksti(self):
+        with open(self.polku, encoding="utf-8") as f:
+            return f.read()
 
-    def test_havainnot_mitatut_luvut_ja_ei_johtopaatoksia(self):
-        polku = self.valmis()
-        self.aja_havainnot(10, polku)
-        with open(polku, encoding="utf-8") as f:
-            teksti = f.read()
-        self.assertTrue(teksti.startswith("# Kauppatiimin havainnot"))
-        self.assertIn("## 2026-W41 (raportti 2026-10-11)", teksti)
-        self.assertIn("alle 28 pv: ei johtopaatoksia", teksti)
-        for osa in ("- flash:", "- pro:", "kaupat 2 (kulut 3.0 USDT)", "hatajarru lukossa", "- BTC:", "max-drawdown"):
-            self.assertIn(osa, teksti)
+    def lisaa_kriitikko(self, salkku_polku, rivit):
+        con = sqlite3.connect(salkku_polku)
+        con.execute("CREATE TABLE IF NOT EXISTS kriitikko_loki (paiva TEXT PRIMARY KEY, ehdotus TEXT NOT NULL, paatos TEXT NOT NULL, kerroin REAL NOT NULL)")
+        for p, ehd, paatos, k in rivit:
+            con.execute("INSERT INTO kriitikko_loki VALUES (?,?,?,?)", (p, json.dumps(ehd), paatos, k))
+        con.commit()
+        con.close()
 
-    def test_havainnot_sama_viikko_vain_kerran_ja_vanha_sailyy(self):
-        polku = self.valmis(17)
-        self.aja_havainnot(10, polku)
-        self.aja_havainnot(10, polku)
-        with open(polku, encoding="utf-8") as f:
-            self.assertEqual(f.read().count("## 2026-W41 "), 1)
-        self.aja_havainnot(17, polku)
-        with open(polku, encoding="utf-8") as f:
-            teksti = f.read()
-        self.assertEqual(teksti.count("## 2026-W"), 2)
-        self.assertLess(teksti.index("## 2026-W41 "), teksti.index("## 2026-W42 "))
+    def hinta(self, paiva_indeksi, avaus, sulku):
+        con = sqlite3.connect(self.data)
+        ts = ms(self.alku + timedelta(days=paiva_indeksi))
+        con.execute("UPDATE hinnat SET open=?, close=? WHERE symbol='BTCUSDT' AND ts=?", (avaus, sulku, ts))
+        con.commit()
+        con.close()
 
-    def test_havainnot_ei_polkua_ei_kirjoita(self):
-        self.valmis()
-        self.aja(10)
-        self.assertFalse(os.path.exists(os.path.join(self.d.name, "havainnot.md")))
+    def valmis(self, paivia=30):
+        self.markkina(paivia); self.salkku(self.a, paivia, kaupat=2); self.salkku(self.b, paivia, 0.002)
 
-    def test_havainnot_kirjoitusvirhe_ei_kaada_raporttia(self):
-        self.valmis()
-        t = self.aja_havainnot(10, os.path.join(self.d.name, "puuttuva-hakemisto", "havainnot.md"))
+    def test_alle_28_pv_ei_viela_dataa(self):
+        self.valmis(10)
+        self.aja_h(10)
+        t = self.teksti()
+        self.assertIn("## flash: ei viela dataa (10 pv < 28)", t)
+        self.assertIn("## pro: ei viela dataa (10 pv < 28)", t)
+        self.assertNotIn("kulut", t)
+
+    def test_mitatut_luvut_ilman_tuottoa_ja_alle_rajan(self):
+        self.valmis(30)
+        self.aja_h(30)
+        t = self.teksti()
+        self.assertTrue(t.startswith("# Tiimin omat aiemmat tulokset (dataa, ei ohjeita)"))
+        self.assertIn("## flash (30 pv)", t)
+        self.assertIn("- paatospaivia 30, hylattyja 27 %", t)
+        self.assertIn("- kriitikko: ei viela kirjauksia", t)
+        self.assertIn("- kulut 3.0 USDT (0.10 / paatos), vaihtuvuus", t)
+        self.assertIn("kateisosuus 10 %", t)
+        for kielletty in ("alusta", "BTC", "viikko", "tuotto %", "drawdown"):
+            self.assertNotIn(kielletty, t)
+        self.assertLessEqual(len(t), retro.HAVAINNOT_MAX)
+
+    def test_kriitikon_arvo_merkki_ja_osuudet(self):
+        self.valmis(30)
+        self.hinta(5, 100.0, 90.0)     # tappiopaiva: pienennys auttoi
+        self.hinta(6, 100.0, 110.0)    # voittopaiva: hylkays maksoi
+        p = lambda i: (self.alku + timedelta(days=i)).isoformat()
+        self.lisaa_kriitikko(self.a, [(p(4), {"BTCUSDT": 0.1}, "hyvaksy", 1.0), (p(5), {"BTCUSDT": 0.1}, "pienenna", 0.5),
+                                      (p(6), {"BTCUSDT": 0.1}, "hylkaa", 1.0)])
+        self.aja_h(30)
+        t = self.teksti()
+        # paiva 5: (0.5-1)*(0.1*-0.1)=+0.005; paiva 6: (0-1)*(0.1*0.1)=-0.01; yht -0.005 -> -0.50 %-yks
+        self.assertIn("- kriitikko: 3 ehdotusta, pienensi 33 %, hylkasi 33 %; arvo -0.50 %-yks (2 pv, ilman kuluja)", t)
+
+    def test_kriitikon_arvo_positiivinen_kun_kriitikko_auttoi(self):
+        self.valmis(30)
+        self.hinta(5, 100.0, 90.0)
+        self.lisaa_kriitikko(self.b, [((self.alku + timedelta(days=5)).isoformat(), {"BTCUSDT": 0.1}, "pienenna", 0.5)])
+        self.aja_h(30)
+        self.assertIn("arvo +0.50 %-yks (1 pv, ilman kuluja)", self.teksti())
+
+    def test_puuttuva_hinta_ja_rikkinainen_json_ohitetaan(self):
+        self.valmis(30)
+        p = (self.alku + timedelta(days=5)).isoformat()
+        self.lisaa_kriitikko(self.a, [(p, {"EIOLE": 0.1}, "pienenna", 0.5)])
+        con = sqlite3.connect(self.a)
+        con.execute("INSERT INTO kriitikko_loki VALUES (?,?,?,?)", ((self.alku + timedelta(days=6)).isoformat(), "ei json", "hylkaa", 0.0))
+        con.commit(); con.close()
+        self.aja_h(30)
+        self.assertIn("kriitikko: 2 ehdotusta, pienensi 50 %, hylkasi 50 %; arvo +0.00 %-yks (0 pv", self.teksti())
+
+    def test_ylikirjoittaa_eika_kasva(self):
+        self.valmis(30)
+        self.aja_h(30)
+        eka = self.teksti()
+        self.aja_h(30)
+        self.assertEqual(self.teksti(), eka)
+        self.assertFalse(os.path.exists(self.polku + ".tmp"))
+
+    def test_pituusraja_katkaisee_riviltaan(self):
+        self.valmis(30)
+        with mock.patch.object(retro, "HAVAINNOT_MAX", 120):
+            self.aja_h(30)
+        t = self.teksti()
+        self.assertLessEqual(len(t), 160)
+        self.assertTrue(t.endswith("(katkaistu)\n"))
+
+    def test_ei_polkua_ei_kirjoita(self):
+        self.valmis(30)
+        self.aja_h(30, polku=None)
+        self.assertFalse(os.path.exists(self.polku))
+
+    def test_kirjoitusvirhe_ei_kaada_raporttia(self):
+        self.valmis(30)
+        t = self.aja_h(30, polku=os.path.join(self.d.name, "puuttuva", "havainnot.md"))
         self.assertIn("flash:", t)
         self.assertIn("havaintoja ei voitu kirjoittaa (FileNotFoundError)", t)
 
-    def test_havainnot_ei_salkkudataa_ei_osiota(self):
-        self.markkina(10)
-        polku = os.path.join(self.d.name, "havainnot.md")
-        self.aja_havainnot(10, polku)
-        self.assertFalse(os.path.exists(polku))
+    def test_salkkua_ei_ole(self):
+        self.markkina(30); self.salkku(self.a, 30)
+        self.aja_h(30)
+        self.assertIn("## pro: ei viela dataa (0 pv < 28)", self.teksti())
 
 
 if __name__ == "__main__":
