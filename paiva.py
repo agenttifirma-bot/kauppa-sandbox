@@ -1,6 +1,7 @@
 """Paivittainen putki (yksi salkku / yksi malli): data -> taulukko -> analyytikko -> kriitikko -> riskivahti -> simulaatio -> raportti.
 HUOM: vain eteenpain (forward) -paperikauppa: menneisyyden LLM-backtest on saastunut, koska malli on nahnyt vanhat hinnat."""
 import argparse
+import json
 import os
 import sys
 import time
@@ -57,6 +58,17 @@ def _kirjaa_kutsu(sal, paiva, rooli, malli, kaytto):
     sal.commit()
 
 
+def _kirjaa_kriitikko(sal, paiva, painot, kritiikki):
+    """Tallentaa analyytikon ehdotuksen ja kriitikon paatoksen retron havaintoja varten (doc 67 vaihe 1). Vain kirjaus: ei koskaan kaada ajoa."""
+    try:
+        sal.execute("CREATE TABLE IF NOT EXISTS kriitikko_loki (paiva TEXT PRIMARY KEY, ehdotus TEXT NOT NULL, paatos TEXT NOT NULL, kerroin REAL NOT NULL)")
+        sal.execute("INSERT OR REPLACE INTO kriitikko_loki VALUES (?,?,?,?)",
+                    (paiva.isoformat(), json.dumps(painot, sort_keys=True), kritiikki["paatos"], float(kritiikki["kerroin"])))
+        sal.commit()
+    except Exception:
+        pass
+
+
 def aja_paiva(paiva, malli, markkina, sal, env, hae_llm=None):
     """Ajaa yhden simulaatiopaivan. Palauttaa raporttidictin. Fail closed: virhe = ei kauppoja, tila sailyy."""
     tulos = {"paiva": paiva.isoformat(), "malli": malli, "analyytikko": None, "kriitikko": None, "virhe": None}
@@ -84,6 +96,7 @@ def aja_paiva(paiva, malli, markkina, sal, env, hae_llm=None):
                 k, kaytto = agentit.kysy_kriitikko(teksti, omistukset, a["paino"], malli, env, hae_llm)
                 _kirjaa_kutsu(sal, paiva, "kriitikko", malli, kaytto)
                 tulos["kriitikko"] = k
+                _kirjaa_kriitikko(sal, paiva, a["paino"], k)
                 ehdotus = agentit.sovella_kriitikko(a["paino"], k)
         except (llm.LLMVirhe, agentit.Vastausvirhe) as e:
             if getattr(e, "kaytto", None) is not None:

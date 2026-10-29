@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import unittest
 from datetime import date, timedelta
 
@@ -101,6 +102,34 @@ class PutkiTesti(unittest.TestCase):
         self.assertIn("<data", hae.kutsut[0]["messages"][1]["content"])
         txt = paiva.raportti(t, self.sal, self.mk)
         self.assertIn("Salkku", txt)
+
+    def kriitikko_loki(self):
+        try:
+            return self.sal.execute("SELECT paiva, ehdotus, paatos, kerroin FROM kriitikko_loki").fetchall()
+        except sqlite3.OperationalError:
+            return None
+
+    def test_kriitikon_paatos_kirjataan_retroa_varten(self):
+        paiva.aja_paiva(D, "m", self.mk, self.sal, ENV, valemalli([A, '{"paatos": "pienenna", "kerroin": 0.5, "ongelmat": []}']))
+        rivit = self.kriitikko_loki()
+        self.assertEqual([(r[0], r[2], r[3]) for r in rivit], [(D.isoformat(), "pienenna", 0.5)])
+        self.assertEqual(json.loads(rivit[0][1]), json.loads(A)["paino"])   # analyytikon alkuperainen ehdotus, ei pienennetty
+
+    def test_kriitikon_hylkays_kirjataan(self):
+        paiva.aja_paiva(D, "m", self.mk, self.sal, ENV, valemalli([A, '{"paatos": "hylkaa"}']))
+        self.assertEqual([(r[2], r[3]) for r in self.kriitikko_loki()], [("hylkaa", 1.0)])
+
+    def test_ei_kirjausta_ilman_kriitikkoa(self):
+        paiva.aja_paiva(D, "m", self.mk, self.sal, ENV, valemalli(['{"en_tieda": true, "syy": "x"}']))
+        self.assertIsNone(self.kriitikko_loki())
+
+    def test_kirjausvirhe_ei_kaada_ajoa(self):
+        class Rikki:
+            def execute(self, *a, **k):
+                raise sqlite3.OperationalError("lukittu")
+        paiva._kirjaa_kriitikko(Rikki(), D, {"BTCUSDT": 0.1}, {"paatos": "hyvaksy", "kerroin": 1.0})   # ei nosta
+        t = paiva.aja_paiva(D, "m", self.mk, self.sal, ENV, valemalli([A, K_OK]))
+        self.assertIsNone(t["virhe"])
 
     def test_en_tieda_ei_kauppoja_eika_kriitikkoa(self):
         hae = valemalli(['{"en_tieda": true, "syy": "epaselva"}'])
