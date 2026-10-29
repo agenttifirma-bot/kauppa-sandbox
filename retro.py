@@ -14,6 +14,8 @@ import rajat
 import salkku
 
 MIN_PV_JOHTOPAATOS = 28  # tata lyhyemmalla historialla ei sanota kumpi malli on parempi
+# Havaintoloki on omassa hakemistossaan, koska palvelu kayttaa ReadOnlyPaths=/srv/kauppa/data; kirjoitus on vain lisaava
+HAVAINNOT_POLKU = os.environ.get("KAUPPA_HAVAINNOT", "/srv/kauppa/havainnot/havainnot.md")
 
 
 def _ro(polku):
@@ -59,7 +61,9 @@ def salkun_rivi(nimi, s, tanaan):
                  len(vk_kaupat), kulut, len(vk_p), hylatyt, ", max-drawdown %.1f %%" % (100 * mdd["max_dd"]) if mdd else "")]
     if s["tila"].get("jarru") == "1":
         rivit.append("  HATAJARRU LUKOSSA")
-    return rivit, {"paiva": viim_p, "alku": s["tila"].get("aloituspaiva"), "tuotto": _pct(viim_a, alku_a), "viikko": _pct(viim_a, viikko_a), "arvot": arvot}
+    return rivit, {"paiva": viim_p, "alku": s["tila"].get("aloituspaiva"), "tuotto": _pct(viim_a, alku_a), "viikko": _pct(viim_a, viikko_a), "arvot": arvot,
+                   "dd": mdd["max_dd"] if mdd else None, "kaupat": len(vk_kaupat), "kulut": kulut, "paatokset": len(vk_p), "hylatyt": hylatyt,
+                   "jarru": s["tila"].get("jarru") == "1"}
 
 
 def vertailut(markkina, aloitus, viimeisin):
@@ -77,7 +81,41 @@ def vertailut(markkina, aloitus, viimeisin):
     return ulos
 
 
-def raportti(data_polku, salkut, tanaan, pysaytys_polku=None):
+def viikon_tunniste(tanaan):
+    iso = tanaan.isocalendar()
+    return "%d-W%02d" % (iso[0], iso[1])
+
+
+def havainnot_osio(tanaan, tiedot, v, pv):
+    """Yhden viikon havaintoosio (vain mitatut luvut, ei johtopaatoksia)."""
+    rivit = ["## %s (raportti %s)" % (viikon_tunniste(tanaan), tanaan.isoformat()),
+             "Historiaa %d pv%s." % (pv, " (alle %d pv: ei johtopaatoksia)" % MIN_PV_JOHTOPAATOS if pv < MIN_PV_JOHTOPAATOS else "")]
+    for nimi, t in sorted(tiedot.items()):
+        rivit.append("- %s: alusta %+.2f %%, viikko %+.2f %%, max-drawdown %s, kaupat %d (kulut %.1f USDT), paatospaivia %d, hylattyja %d%s" % (
+            nimi, t["tuotto"], t["viikko"], "%.1f %%" % (100 * t["dd"]) if t["dd"] is not None else "-", t["kaupat"], t["kulut"],
+            t["paatokset"], t["hylatyt"], ", hatajarru lukossa" if t["jarru"] else ""))
+    for nimi, (a, w) in v.items():
+        rivit.append("- %s: alusta %+.2f %%, viikko %+.2f %%" % (nimi, a, w))
+    return "\n".join(rivit) + "\n"
+
+
+def kirjoita_havainnot(polku, tanaan, osio):
+    """Lisaa osion tiedoston loppuun. Ei koskaan ylikirjoita; saman viikon osio kirjoitetaan vain kerran. Palauttaa True, jos kirjoitti."""
+    otsikko = "## %s " % viikon_tunniste(tanaan)
+    vanha = ""
+    if os.path.exists(polku):
+        with open(polku, encoding="utf-8") as f:
+            vanha = f.read()
+        if any(r.startswith(otsikko) for r in vanha.splitlines()):
+            return False
+    with open(polku, "a", encoding="utf-8") as f:
+        if not vanha:
+            f.write("# Kauppatiimin havainnot\n\nViikoittain lisattavat mitatut luvut (retro.py). Ei johtopaatoksia lyhyesta datasta.\n")
+        f.write("\n" + osio)
+    return True
+
+
+def raportti(data_polku, salkut, tanaan, pysaytys_polku=None, havainnot_polku=None):
     rivit = ["Kauppatiimi viikkoretro (%s)" % tanaan.isoformat()]
     tiedot = {}
     for nimi, polku in sorted(salkut.items()):
@@ -93,6 +131,7 @@ def raportti(data_polku, salkut, tanaan, pysaytys_polku=None):
     if tiedot:
         alut = [t["alku"] for t in tiedot.values() if t["alku"]]
         viim = max(date.fromisoformat(t["paiva"]) for t in tiedot.values())
+        v = {}
         if alut:
             aloitus = date.fromisoformat(min(alut))
             try:
@@ -116,6 +155,11 @@ def raportti(data_polku, salkut, tanaan, pysaytys_polku=None):
             (n1, t1), (n2, t2) = sorted(tiedot.items())
             ero = t1["tuotto"] - t2["tuotto"]
             rivit.append("%d pv: %s vs %s ero %+.2f %%-yks. Yksi jakso ei todista mallin paremmuutta; K6-testit ratkaisevat." % (pv, n1, n2, ero))
+        if havainnot_polku:
+            try:
+                kirjoita_havainnot(havainnot_polku, tanaan, havainnot_osio(tanaan, tiedot, v, pv))
+            except OSError as e:
+                rivit.append("havaintoja ei voitu kirjoittaa (%s)" % type(e).__name__)
     if pysaytys_polku and os.path.exists(pysaytys_polku):
         rivit.append("KILL SWITCH PAALLA: ajot pysaytetty")
     return "\n".join(rivit)
@@ -127,7 +171,7 @@ def main():
     ap.add_argument("--ei-tg", action="store_true")
     a = ap.parse_args()
     tanaan = datetime.now(timezone.utc).date()
-    msg = raportti(config.DB_POLKU, rajat.SALKUT, tanaan, rajat.PYSAYTYS)
+    msg = raportti(config.DB_POLKU, rajat.SALKUT, tanaan, rajat.PYSAYTYS, HAVAINNOT_POLKU)
     print(msg)
     if not a.ei_tg:
         try:

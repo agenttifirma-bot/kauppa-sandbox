@@ -94,6 +94,54 @@ class RetroTesti(unittest.TestCase):
         self.aja(10)
         self.assertEqual(m, [os.path.getmtime(self.a), os.path.getmtime(self.b)])
 
+    def aja_havainnot(self, paivia, polku):
+        tanaan = self.alku + timedelta(days=paivia)
+        return retro.raportti(self.data, {"flash": self.a, "pro": self.b}, tanaan, None, polku)
+
+    def valmis(self, paivia=10):
+        self.markkina(paivia); self.salkku(self.a, paivia, kaupat=2); self.salkku(self.b, paivia, 0.002, jarru=True)
+        return os.path.join(self.d.name, "havainnot.md")
+
+    def test_havainnot_mitatut_luvut_ja_ei_johtopaatoksia(self):
+        polku = self.valmis()
+        self.aja_havainnot(10, polku)
+        with open(polku, encoding="utf-8") as f:
+            teksti = f.read()
+        self.assertTrue(teksti.startswith("# Kauppatiimin havainnot"))
+        self.assertIn("## 2026-W41 (raportti 2026-10-11)", teksti)
+        self.assertIn("alle 28 pv: ei johtopaatoksia", teksti)
+        for osa in ("- flash:", "- pro:", "kaupat 2 (kulut 3.0 USDT)", "hatajarru lukossa", "- BTC:", "max-drawdown"):
+            self.assertIn(osa, teksti)
+
+    def test_havainnot_sama_viikko_vain_kerran_ja_vanha_sailyy(self):
+        polku = self.valmis(17)
+        self.aja_havainnot(10, polku)
+        self.aja_havainnot(10, polku)
+        with open(polku, encoding="utf-8") as f:
+            self.assertEqual(f.read().count("## 2026-W41 "), 1)
+        self.aja_havainnot(17, polku)
+        with open(polku, encoding="utf-8") as f:
+            teksti = f.read()
+        self.assertEqual(teksti.count("## 2026-W"), 2)
+        self.assertLess(teksti.index("## 2026-W41 "), teksti.index("## 2026-W42 "))
+
+    def test_havainnot_ei_polkua_ei_kirjoita(self):
+        self.valmis()
+        self.aja(10)
+        self.assertFalse(os.path.exists(os.path.join(self.d.name, "havainnot.md")))
+
+    def test_havainnot_kirjoitusvirhe_ei_kaada_raporttia(self):
+        self.valmis()
+        t = self.aja_havainnot(10, os.path.join(self.d.name, "puuttuva-hakemisto", "havainnot.md"))
+        self.assertIn("flash:", t)
+        self.assertIn("havaintoja ei voitu kirjoittaa (FileNotFoundError)", t)
+
+    def test_havainnot_ei_salkkudataa_ei_osiota(self):
+        self.markkina(10)
+        polku = os.path.join(self.d.name, "havainnot.md")
+        self.aja_havainnot(10, polku)
+        self.assertFalse(os.path.exists(polku))
+
 
 if __name__ == "__main__":
     unittest.main()
