@@ -1,5 +1,5 @@
 [Unit]
-Description=Kauppatiimi: viikkoretro (vain luku, Telegram)
+Description=Kauppatiimi: viikkoretro (Telegram + havaintoloki, salkut vain luku)
 After=network-online.target
 
 [Service]
@@ -14,3 +14,4 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 ReadOnlyPaths=/srv/kauppa/data
+ReadWritePaths=-/srv/kauppa/havainnot
